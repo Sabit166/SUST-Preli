@@ -1,2 +1,4 @@
 SUST*
 .env
+__pycache__/
+.puku/
