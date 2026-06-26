@@ -1,6 +1,92 @@
-SUST*
-.env
+# ---------------------------------------------------------------------------
+# Editor / IDE
+# ---------------------------------------------------------------------------
+.puku/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
 __pycache__/
 .puku/
 .venv/
 failed_cases.json
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# Pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache
+.tox/
+.nox/
+
+# mypy / ruff / black caches
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# ---------------------------------------------------------------------------
+# OS junk
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------------------------------------------------------------------------
+# Logs / runtime
+# ---------------------------------------------------------------------------
+*.log
+logs/
+nohup.out
+
+# ---------------------------------------------------------------------------
+# Local secrets / env files
+# ---------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+secrets.*
+
+# ---------------------------------------------------------------------------
+# Dev-only helpers (NOT part of the judging suite)
+# ---------------------------------------------------------------------------
+_smoke.py
+_validation_matrix.py
