@@ -2,3 +2,5 @@ SUST*
 .env
 __pycache__/
 .puku/
+.venv/
+failed_cases.json
