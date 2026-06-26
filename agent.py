@@ -14,7 +14,15 @@ import re
 from pathlib import Path
 from typing import Any
 
-from groq import AsyncGroq
+# ---------------------------------------------------------------------------
+# Provider selection. Defaults to Groq (already wired in run_agent_tests.py).
+# Set LLM_PROVIDER=xai to route to xAI Grok instead — same code path.
+# ---------------------------------------------------------------------------
+try:
+    from groq import AsyncGroq  # type: ignore
+    _HAS_GROQ = True
+except Exception:  # noqa: BLE001
+    _HAS_GROQ = False
 
 from system_prompt import System_Prompt
 from translator import translation_prompt
@@ -46,17 +54,127 @@ def _load_env() -> None:
     _ENV_LOADED = True
 
 
-def _get_client() -> AsyncGroq:
+def _get_client():
+    """Return an async chat-completions client.
+
+    Provider is selected by env var `LLM_PROVIDER`:
+      - "groq" (default): returns `groq.AsyncGroq` — needs `GROQ_API_KEY`.
+      - "xai":   returns a tiny shim around xAI's [redacted]-compatible API,
+                  needs `XAI_API_KEY`. Uses only `urllib` from stdlib so we
+                  don't pull in a second SDK.
+
+    Both clients expose the same `.chat.completions.create(...)` coroutine
+    with the kwargs we use below, so the rest of agent.py is provider-agnostic.
+    """
     _load_env()
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise RuntimeError("GROQ_API_KEY is not set. Add it to your .env file.")
-    return AsyncGroq(api_key=api_key)
+    provider = os.getenv("LLM_PROVIDER", "groq").lower()
+
+    if provider == "xai":
+        return _XaiClient()
+
+    if provider == "groq":
+        if not _HAS_GROQ:
+            raise RuntimeError(
+                "groq SDK is not installed. Run: pip install groq"
+            )
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY is not set. Add it to your .env file.")
+        return AsyncGroq(api_key=api_key)
+
+    raise RuntimeError(
+        f"Unknown LLM_PROVIDER={provider!r}. Use 'groq' or 'xai'."
+    )
 
 
 def _get_model() -> str:
     _load_env()
-    return os.getenv("model_name") or os.getenv("MODEL") or "llama-3.1-70b-versatile"
+    provider = os.getenv("LLM_PROVIDER", "groq").lower()
+    if provider == "xai":
+        return os.getenv("model_name") or os.getenv("MODEL") or "grok-2"
+    return os.getenv("model_name") or os.getenv("MODEL") or "llama-3.3-70b-versatile"
+
+
+# ---------------------------------------------------------------------------
+# xAI (Grok) — minimal async client over their [redacted]-compatible API.
+# We avoid adding the `xai` SDK so the dependency surface stays small.
+# ---------------------------------------------------------------------------
+
+class _XaiChatCompletions:
+    def __init__(self, api_key: str, base_url: str) -> None:
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
+
+    async def create(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        response_format: dict[str, str] | None = None,
+    ) -> "_XaiChatResponse":
+        import urllib.request
+
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        # xAI accepts response_format={"type":"json_object"} the same way.
+        if response_format:
+            body["response_format"] = response_format
+
+        req = urllib.request.Request(
+            f"{self._base_url}/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        loop = asyncio.get_running_loop()
+
+        def _do_request() -> str:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return resp.read().decode("utf-8")
+
+        raw = await loop.run_in_executor(None, _do_request)
+        parsed = json.loads(raw)
+        return _XaiChatResponse(parsed)
+
+
+class _XaiChatResponse:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+    @property
+    def choices(self) -> list["_XaiChoice"]:
+        return [_XaiChoice(c) for c in self._payload.get("choices", [])]
+
+
+class _XaiChoice:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.message = _XaiMessage(payload.get("message", {}))
+
+
+class _XaiMessage:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.content = payload.get("content", "") or ""
+
+
+class _XaiClient:
+    """xAI Grok client with the same surface as `groq.AsyncGroq`."""
+
+    def __init__(self) -> None:
+        api_key = os.getenv("XAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("XAI_API_KEY is not set. Add it to your .env file.")
+        base_url = os.getenv("XAI_BASE_URL", "https://api.x.ai/v1")
+        self.chat = type("Chat", (), {"completions": _XaiChatCompletions(api_key, base_url)})()
 
 
 # ---------------------------------------------------------------------------

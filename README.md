@@ -14,11 +14,22 @@ JSON envelope that an agent or downstream system can consume.
 ## What's in the box
 
 - `main.py` — FastAPI app, all classification + routing logic
-- `agent.py` — agent entrypoint
+- `agent.py` — agent entrypoint (Groq by default; xAI Grok via `LLM_PROVIDER=xai`)
 - `system_prompt.py` — system prompt for the agent
+- `translator.py` — Bangla/Banglish → English prompt used by the agent
+- `run_agent_tests.py` — runs the agent against `agent_test_cases.json`
 - `test_samples.py` — 10 sample cases (used as the judging fixture)
 - `requirements.txt` — Python dependencies
 - `run.ps1`, `run.bat`, `run.sh` — convenience launchers (see below)
+
+### Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET`  | `/health` | readiness probe (always-on) |
+| `GET`  | `/analyze-ticket/agent/health` | readiness probe for the LLM route (`ready: true` only when a key is configured) |
+| `POST` | `/analyze-ticket` | **offline / judging** — pure keyword + hardcoded templates |
+| `POST` | `/analyze-ticket/agent` | **live demo** — runs `agent.handle_ticket()` (Groq or xAI); falls back to the keyword route if the LLM fails or times out |
 
 ---
 
